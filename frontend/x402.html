@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Telegraph · x402</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<header><h1>04 · x402 pay-per-call inference</h1><a href="/">← all examples</a></header>
+<main>
+  <p class="kv">The full x402 loop in the browser: request → <b>402 Payment Required</b> → sign a gasless USDC <code>TransferWithAuthorization</code> (EIP-3009/EIP-712) → retry with <code>PAYMENT-SIGNATURE</code> → inference result → <b>settlement proven on Base Sepolia</b>. You need Circle Base Sepolia USDC (0x036C…) in the paying wallet — no ETH required.</p>
+
+  <h3>Wallet</h3>
+  <div class="row">
+    <input id="pkey" type="password" placeholder="testnet private key (optional — else MetaMask)" style="width:340px">
+    <button id="load">load wallet</button>
+    <span id="wallet" class="badge">no wallet</span>
+    <span id="usdc" class="badge"></span>
+  </div>
+
+  <h3>Request</h3>
+  <div class="row">
+    <select id="target">
+      <option value="engine">Engine auto-routed ask (POST /engine/v1/ask)</option>
+      <option value="18">Zeus weather (GET /miner-dispatcher/v1/18/predict)</option>
+      <option value="102">OpenAI chat (POST /miner-dispatcher/v1/102/chat)</option>
+    </select>
+    <button id="send" disabled>send + pay</button>
+  </div>
+  <textarea id="input">What is the weather in Paris right now?</textarea>
+
+  <div class="log" id="log" style="max-height:420px"></div>
+</main>
+<script type="module">
+  import { ethers } from "https://cdn.jsdelivr.net/npm/ethers@6.13.4/+esm";
+  import { loadConfig, NODE, ADDR, BASESCAN, $, logger, makeSigner, fetchWithPayment, fmtUSDC, ERC20_ABI } from "/assets/tg.js";
+
+  const cfg = await loadConfig();
+  const out = logger("#log");
+  let signer = null;
+
+  $("#load").onclick = async () => {
+    try {
+      signer = await makeSigner(ethers, cfg.rpcUrl, cfg.chainId, $("#pkey").value);
+      $("#wallet").textContent = signer.address;
+      $("#wallet").className = "badge ok";
+      const usdc = new ethers.Contract(ADDR.usdcX402, ERC20_ABI, signer.provider);
+      $("#usdc").textContent = `USDC ${fmtUSDC(await usdc.balanceOf(signer.address))}`;
+      $("#send").disabled = false;
+      out.ok(`wallet ready (${signer.kind})`);
+    } catch (e) { out.err(e.message ?? String(e)); }
+  };
+
+  $("#target").onchange = () => {
+    const t = $("#target").value;
+    $("#input").value = t === "18" ? '{"lat": 48.85, "lon": 2.35, "variable": "2t", "forecast_hours": 12}'
+      : t === "102" ? "Explain the x402 payment standard in one sentence."
+      : "What is the weather in Paris right now?";
+  };
+
+  $("#send").onclick = async () => {
+    try {
+      $("#send").disabled = true;
+      const t = $("#target").value;
+      const input = $("#input").value;
+      let url, init;
+      if (t === "engine") {
+        url = `${NODE}/engine/v1/ask`;
+        init = { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query: input }) };
+      } else if (t === "18") {
+        const q = JSON.parse(input);
+        url = `${NODE}/miner-dispatcher/v1/18/predict?${new URLSearchParams(q)}`;
+        init = { method: "GET" };
+      } else {
+        url = `${NODE}/miner-dispatcher/v1/102/chat`;
+        init = { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "gpt-4o-mini", messages: [{ role: "user", content: input }] }) };
+      }
+
+      out.step(`request → ${url.replace(NODE, "")}`);
+      const startBlock = await signer.provider.getBlockNumber();
+      const { response, paid, signed } = await fetchWithPayment(ethers, signer, cfg.chainId, url, init, (ev, data) => {
+        if (ev === "challenge") {
+          const a = data.accepts.find((x) => x.network.startsWith("eip155:"));
+          out.warn(`402 Payment Required — ${fmtUSDC(a.amount)} USDC to ${a.payTo}`);
+        }
+        if (ev === "signed") out.step("signed EIP-3009 authorization — retrying with PAYMENT-SIGNATURE");
+      });
+
+      if (!response.ok) { out.err(`HTTP ${response.status}: ${(await response.text()).slice(0, 300)}`); return; }
+      out.ok(`inference result (paid: ${paid})`);
+      out.json(await response.json());
+
+      if (paid && signed) {
+        out.step("verifying settlement on Base Sepolia…");
+        const usdc = new ethers.Contract(ADDR.usdcX402, ERC20_ABI, signer.provider);
+        const value = BigInt(signed.authorization.value);
+        for (let i = 0; i < 24; i++) {
+          const logs = await usdc.queryFilter(usdc.filters.Transfer(signer.address, signed.accept.payTo), startBlock, "latest").catch(() => []);
+          const hit = logs.find((l) => l.args.value === value);
+          if (hit) {
+            out.ok(`payment settled on-chain: ${fmtUSDC(value)}`);
+            const a = document.createElement("a");
+            a.href = `${BASESCAN}/tx/${hit.transactionHash}`; a.target = "_blank";
+            a.textContent = `${BASESCAN}/tx/${hit.transactionHash}`;
+            a.style.color = "#38bdf8";
+            $("#log").appendChild(a);
+            return;
+          }
+          await new Promise((r) => setTimeout(r, 5000));
+        }
+        out.warn("settlement not seen within 2 min — check verify:x402 script");
+      }
+    } catch (e) { out.err(e.message ?? String(e)); }
+    finally { $("#send").disabled = false; }
+  };
+</script>
+</body>
+</html>

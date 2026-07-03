@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Telegraph · WebSocket</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<header><h1>03 · WebSocket</h1><a href="/">← all examples</a></header>
+<main>
+  <p class="kv">One live socket, three capabilities: anonymous <code>ask</code>/<code>ask_direct</code>, EIP-191 wallet auth, and paid Daemon signal <code>subscribe</code> (needs ≥ $1 USDC escrowed in the Diamond — see the Jobs page).</p>
+
+  <h3>Connection</h3>
+  <div class="row">
+    <input id="pkey" type="password" placeholder="testnet private key (optional — else MetaMask)" style="width:340px">
+    <button id="connectAnon">connect anonymous</button>
+    <button id="connectAuth">connect + wallet auth</button>
+    <span id="connState" class="badge">disconnected</span>
+  </div>
+
+  <h3>Ask (auto-routed, free over WS)</h3>
+  <div class="row">
+    <input id="query" style="flex:1;min-width:300px" value="Will it rain in Tokyo tomorrow?">
+    <button id="ask" disabled>ask</button>
+  </div>
+
+  <h3>Ask direct (you pick the miner)</h3>
+  <div class="row">
+    <select id="miner"></select>
+    <button id="askDirect" disabled>ask_direct</button>
+    <span class="kv">payload comes from a per-miner preset</span>
+  </div>
+
+  <h3>Subscribe to Daemon signals (requires wallet auth)</h3>
+  <div class="row">
+    <input id="intents" style="flex:1;min-width:300px" value="CHAT_COMPLETION,WEATHER_FORECAST,WEB_SEARCH,RESEARCH_SYNTHESIS">
+    <button id="subscribe" disabled>subscribe</button>
+  </div>
+
+  <div class="log" id="log" style="max-height:420px"></div>
+</main>
+<script type="module">
+  import { ethers } from "https://cdn.jsdelivr.net/npm/ethers@6.13.4/+esm";
+  import { loadConfig, NODE, $, logger, makeSigner } from "/assets/tg.js";
+
+  const cfg = await loadConfig();
+  const out = logger("#log");
+  let ws = null, authed = false;
+
+  const presets = {
+    "102": { endpoint: "/chat", method: "POST", payload: { model: "gpt-4o-mini", messages: [{ role: "user", content: "One sentence: what is verifiable inference?" }] } },
+    "18": { endpoint: "/predict", method: "GET", payload: { lat: 35.68, lon: 139.69, variable: "2t", forecast_hours: 6 } },
+    "32": { endpoint: "/detect", method: "POST", payload: { text: "In the ever-evolving landscape of digital transformation, organizations must leverage synergies to unlock unprecedented value across their stakeholder ecosystems. By harnessing cutting-edge paradigms and fostering continuous innovation, enterprises navigate complexity while driving sustainable growth and maximizing operational excellence." } },
+  };
+
+  const cat = await (await fetch(`${NODE}/engine/v1/subnets`)).json();
+  for (const m of cat.miners || []) {
+    if (!presets[m.id]) continue;
+    const o = document.createElement("option");
+    o.value = m.id;
+    o.textContent = `[${m.id}] ${m.name}`;
+    $("#miner").appendChild(o);
+  }
+
+  function connect(walletAddress) {
+    return new Promise((resolve, reject) => {
+      const url = walletAddress ? `${cfg.wsUrl}?wallet_address=${walletAddress}` : cfg.wsUrl;
+      ws = new WebSocket(url);
+      ws.onopen = () => resolve();
+      ws.onerror = (e) => reject(new Error("ws error"));
+      ws.onclose = () => { $("#connState").textContent = "disconnected"; $("#connState").className = "badge"; setButtons(); };
+      ws.onmessage = (ev) => handle(JSON.parse(ev.data));
+    });
+  }
+
+  const waiting = {};
+  function waitFor(types, ms = 30000) {
+    return new Promise((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error(`timeout waiting ${types}`)), ms);
+      for (const ty of types) waiting[ty] = (msg) => { clearTimeout(t); for (const x of types) delete waiting[x]; resolve(msg); };
+    });
+  }
+
+  function handle(msg) {
+    if (waiting[msg.type]) { waiting[msg.type](msg); }
+    const d = msg.data ?? {};
+    switch (msg.type) {
+      case "connected": out.ok(`connected ${d.wallet_address ?? "(anonymous)"}`); break;
+      case "routing": out.step(d.message ?? "routing…"); break;
+      case "routed": out.step(`routed → ${d.subnet_name ?? d.subnet_id} ${d.reasoning ? "— " + d.reasoning : ""}`); break;
+      case "executing": out.step("executing…"); break;
+      case "result":
+        if (d.subscription_id || (d.question && d.routing)) {
+          const q = typeof d.question === "object" ? d.question?.text : d.question;
+          out.sig(`SIGNAL [${d.intent ?? "?"}] ${q}`);
+          out.json(d.execution?.result ?? {});
+        } else {
+          out.ok(`result from ${d.subnet_name ?? d.subnet_used} — $${d.cost_usd} in ${d.duration_ms}ms`);
+          out.json(d.result ?? d);
+        }
+        break;
+      case "subscribed": out.ok(`subscribed: ${JSON.stringify(d.intents ?? d)}`); break;
+      case "wallet_challenge": out.step("challenge received — signing with personal_sign…"); break;
+      case "wallet_verified": out.ok("wallet ownership verified (escrow checked on-chain by KnockGate)"); break;
+      case "error": out.err(JSON.stringify(d)); break;
+      case "pong": break;
+      default: out.step(`${msg.type}: ${JSON.stringify(d).slice(0, 200)}`);
+    }
+  }
+
+  const send = (o) => ws.send(JSON.stringify(o));
+  function setButtons() {
+    const open = ws && ws.readyState === WebSocket.OPEN;
+    $("#ask").disabled = !open;
+    $("#askDirect").disabled = !open;
+    $("#subscribe").disabled = !(open && authed);
+  }
+
+  $("#connectAnon").onclick = async () => {
+    try {
+      authed = false;
+      await connect();
+      $("#connState").textContent = "anonymous"; $("#connState").className = "badge ok";
+      out.ok("socket open (anonymous)"); setButtons();
+    } catch (e) { out.err(e.message); }
+  };
+
+  $("#connectAuth").onclick = async () => {
+    try {
+      const signer = await makeSigner(ethers, cfg.rpcUrl, cfg.chainId, $("#pkey").value);
+      out.step(`connecting as ${signer.address}…`);
+      await connect(signer.address);
+      send({ action: "auth_wallet" });
+      const ch = await waitFor(["wallet_challenge"]);
+      const sig = await signer.signMessage(ch.data.message);
+      send({ action: "wallet_verify", signature: sig });
+      await waitFor(["connected"], 20000);
+      authed = true;
+      $("#connState").textContent = `authed ${signer.address.slice(0, 8)}…`;
+      $("#connState").className = "badge ok";
+      setButtons();
+    } catch (e) { out.err(e.message ?? String(e)); }
+  };
+
+  $("#ask").onclick = () => { out.step(`ask: ${$("#query").value}`); send({ action: "ask", query: $("#query").value }); };
+  $("#askDirect").onclick = () => {
+    const id = $("#miner").value, pz = presets[id];
+    out.step(`ask_direct → miner ${id} ${pz.endpoint}`);
+    send({ action: "ask_direct", subnet_id: id, endpoint: pz.endpoint, method: pz.method, payload: pz.payload });
+  };
+  $("#subscribe").onclick = () => {
+    send({ action: "subscribe", intents: $("#intents").value.split(",").map((s) => s.trim()).filter(Boolean) });
+    out.step("subscribed — signals arrive when the Daemon completes a cycle; each delivery settles against your escrow at the epoch boundary");
+  };
+
+  setInterval(() => ws?.readyState === WebSocket.OPEN && send({ action: "ping" }), 30000);
+</script>
+</body>
+</html>

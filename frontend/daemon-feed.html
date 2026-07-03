@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Telegraph · Daemon feed</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<header><h1>02 · Daemon signal feed</h1><a href="/">← all examples</a></header>
+<main>
+  <p class="kv">The Daemon generates its own questions from real-world sources on a cycle and stores verified answers. This reads the feed live — free, no wallet, plain GET.</p>
+  <div class="row">
+    <select id="category"><option value="">all categories</option></select>
+    <select id="sort">
+      <option value="recent">recent</option>
+      <option value="interest">interest</option>
+    </select>
+    <input id="minInterest" type="number" min="0" max="10" placeholder="min interest" style="width:110px">
+    <button id="refresh">refresh</button>
+    <label class="kv"><input type="checkbox" id="auto" checked> auto (30s)</label>
+    <span id="count" class="badge"></span>
+  </div>
+  <table>
+    <thead><tr><th>when</th><th>signal</th><th>routing</th><th>cost</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+</main>
+<script type="module">
+  import { NODE, $ } from "/assets/tg.js";
+
+  const cats = await (await fetch(`${NODE}/daemon/api/categories`)).json();
+  for (const c of cats.categories || []) {
+    const o = document.createElement("option");
+    o.value = o.textContent = c;
+    $("#category").appendChild(o);
+  }
+
+  async function refresh() {
+    const p = new URLSearchParams({ limit: "25", sort: $("#sort").value });
+    if ($("#category").value) p.set("category", $("#category").value);
+    if ($("#minInterest").value) p.set("min_interest", $("#minInterest").value);
+    const body = await (await fetch(`${NODE}/daemon/api/questions?${p}`)).json();
+    $("#count").textContent = `${body.results?.length ?? 0} of ${body.total ?? "?"}`;
+    $("#rows").innerHTML = (body.results || []).map((r) => {
+      const q = r.question || {}, ro = r.routing || {}, ex = r.execution || {};
+      const res = JSON.stringify(ex.result ?? "");
+      return `<tr>
+        <td class="kv">${(r.created_at || "").slice(5, 16).replace("T", " ")}</td>
+        <td><b>[${q.category ?? "?"} · ${q.interest_score ?? "?"}]</b> ${q.text ?? ""}
+            <div class="kv" style="font-size:11.5px">${res.slice(0, 160)}${res.length > 160 ? "…" : ""}</div></td>
+        <td class="kv">${ro.subnet_name ?? "—"}<br>${ro.intent ?? ""}</td>
+        <td class="kv">${ex.cost_usd != null ? "$" + ex.cost_usd : "—"}<br>${ex.duration_ms ?? ""}ms</td>
+      </tr>`;
+    }).join("");
+  }
+
+  $("#refresh").onclick = refresh;
+  setInterval(() => $("#auto").checked && refresh(), 30_000);
+  await refresh();
+</script>
+</body>
+</html>

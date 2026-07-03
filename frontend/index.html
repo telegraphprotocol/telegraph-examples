@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Telegraph Examples</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<header>
+  <h1>⚡ Telegraph Protocol — Examples</h1>
+  <span class="kv">node: <b id="node">…</b></span>
+  <span id="status" class="badge">checking…</span>
+</header>
+<main>
+  <p class="kv">Each card is a small end-to-end app using one Telegraph feature against a live node. Console script equivalents live in <code>examples/</code>.</p>
+  <div class="grid">
+    <a class="card" href="/discovery.html">
+      <h2>01 · Discovery</h2>
+      <p>Browse the live miner catalog, schemas, prices and the OpenAPI spec. Free, no wallet.</p>
+    </a>
+    <a class="card" href="/daemon-feed.html">
+      <h2>02 · Daemon signal feed</h2>
+      <p>Read the autonomously generated intelligence feed with filters and a top-signals view. Free, no wallet.</p>
+    </a>
+    <a class="card" href="/websocket.html">
+      <h2>03 · WebSocket</h2>
+      <p>Live socket: anonymous ask / ask_direct, EIP-191 wallet auth, and paid Daemon signal subscriptions.</p>
+    </a>
+    <a class="card" href="/x402.html">
+      <h2>04 · x402 pay-per-call</h2>
+      <p>Get a 402 challenge, sign a gasless USDC EIP-3009 authorization, receive inference, verify the settlement on Base Sepolia.</p>
+    </a>
+    <a class="card" href="/jobs.html">
+      <h2>05 · ERC-8183 on-chain jobs</h2>
+      <p>Escrow USDC in the Diamond, create a job, watch it hit Terminal, audit the 98/2 split and your callback's stored result.</p>
+    </a>
+  </div>
+</main>
+<script type="module">
+  import { loadConfig, NODE, $ } from "/assets/tg.js";
+  const cfg = await loadConfig();
+  $("#node").textContent = cfg.nodeUrl;
+  try {
+    const r = await fetch(`${NODE}/daemon/health`);
+    $("#status").textContent = r.ok ? "node online" : `HTTP ${r.status}`;
+    $("#status").className = `badge ${r.ok ? "ok" : "err"}`;
+  } catch {
+    $("#status").textContent = "node unreachable";
+    $("#status").className = "badge err";
+  }
+</script>
+</body>
+</html>

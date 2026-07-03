@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Telegraph · Discovery</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<header><h1>01 · Discovery</h1><a href="/">← all examples</a></header>
+<main>
+  <p class="kv">Free endpoints an agent uses to learn the network before paying:
+    <code>/miner-dispatcher/integrations</code>, <code>/engine/v1/subnets</code>, <code>/miner-dispatcher/openapi.json</code>.</p>
+
+  <h3>Live miner catalog</h3>
+  <div id="miners" class="grid"></div>
+
+  <h3>OpenAPI paths (machine-readable spec for agents)</h3>
+  <div id="paths" class="log" style="max-height:260px"></div>
+</main>
+<script type="module">
+  import { NODE, $ } from "/assets/tg.js";
+
+  const miners = await (await fetch(`${NODE}/miner-dispatcher/integrations`)).json();
+  $("#miners").innerHTML = miners.map((m) => `
+    <div class="card">
+      <h2>[${m.id}] ${m.name}</h2>
+      <p>${(m.description || "").split("\n")[0]}</p>
+      <p style="margin-top:8px">
+        ${(m.supported_intents || []).map((i) => `<span class="badge">${i}</span>`).join(" ")}
+      </p>
+      <p style="margin-top:8px" class="kv">
+        ${(m.endpoints || []).map((e) => `<b>${e.method}</b> /v1/${m.id}${e.path}`).join("<br>")}
+      </p>
+      ${m.input_schema?.required ? `<p style="margin-top:6px">required: ${m.input_schema.required.join(", ")}</p>` : ""}
+    </div>`).join("");
+
+  const spec = await (await fetch(`${NODE}/miner-dispatcher/openapi.json`)).json();
+  $("#paths").textContent = Object.entries(spec.paths || {})
+    .map(([p, ops]) => `${Object.keys(ops).map((m) => m.toUpperCase()).join(",").padEnd(6)} ${p}`)
+    .join("\n");
+</script>
+</body>
+</html>

@@ -1,0 +1,47 @@
+version: "1"
+kind: collector
+slug: demo-hn-frontpage
+name: Demo Hacker News Frontpage
+description: >
+  Example collector registration for the telegraph-examples repo. Polls the
+  Hacker News front page (Algolia API) and fires on stories over 100 points
+  so the Daemon can turn tech headlines into scored questions.
+  NOTE(node-version): match the `routing` block to your node's collector
+  schema — current deployments expect it; newer schemas omit it and let the
+  LLM pick the intent at ask time.
+base_url: https://hn.algolia.com
+rate_limit_per_sec: 2
+
+collection:
+  interval_seconds: 1800
+  timeout_seconds: 20
+  endpoint: /api/v1/search
+  method: GET
+  query_params:
+    tags: "front_page"
+    hitsPerPage: "30"
+  response_array_path: hits
+
+triggers:
+  - name: popular_tech_story
+    operator: gt
+    field: points
+    value: "100"
+    description: Story has over 100 HN points — significant tech community interest.
+
+output:
+  format: json
+  field_mappings:
+    - name: title
+      source_path: title
+    - name: url
+      source_path: url
+    - name: points
+      source_path: points
+      transform: to_int
+    - name: author
+      source_path: author
+
+routing:
+  intent: NEWS_SEARCH
+  description: Route generated questions as news search / synthesis tasks.

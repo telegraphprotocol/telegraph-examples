@@ -1,0 +1,47 @@
+{
+  "name": "telegraph-examples",
+  "version": "1.0.0",
+  "description": "End-to-end examples for every Telegraph Protocol feature: discovery, WebSocket signals, Engine ask, x402 payments, ERC-8183 on-chain jobs — with on-chain verification.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "discovery:integrations": "tsx examples/01-discovery/integrations.ts",
+    "discovery:subnets": "tsx examples/01-discovery/subnets.ts",
+    "discovery:daemon-feed": "tsx examples/01-discovery/daemon-feed.ts",
+    "discovery:categories": "tsx examples/01-discovery/categories.ts",
+    "discovery:openapi": "tsx examples/01-discovery/openapi.ts",
+    "discovery:health": "tsx examples/01-discovery/health.ts",
+    "ws:connect": "tsx examples/02-websocket/connect-auth.ts",
+    "ws:ask": "tsx examples/02-websocket/ask.ts",
+    "ws:ask-direct": "tsx examples/02-websocket/ask-direct.ts",
+    "ws:list-subnets": "tsx examples/02-websocket/list-subnets.ts",
+    "ws:subscribe": "tsx examples/02-websocket/subscription-stream.ts",
+    "x402:engine-ask": "tsx examples/03-engine-x402/ask.ts",
+    "x402:weather": "tsx examples/04-x402-direct/weather.ts",
+    "x402:chat": "tsx examples/04-x402-direct/chat.ts",
+    "x402:detect": "tsx examples/04-x402-direct/ai-text-detect.ts",
+    "jobs:escrow": "tsx examples/05-erc8183-jobs/escrow.ts",
+    "jobs:deploy-callback": "tsx examples/05-erc8183-jobs/deploy-callback.ts",
+    "jobs:create": "tsx examples/05-erc8183-jobs/create-job.ts",
+    "jobs:status": "tsx examples/05-erc8183-jobs/job-status.ts",
+    "verify:balances": "tsx examples/06-onchain-verify/balances.ts",
+    "verify:x402": "tsx examples/06-onchain-verify/verify-x402.ts",
+    "verify:job": "tsx examples/06-onchain-verify/verify-job.ts",
+    "reg:miner": "tsx examples/07-registration/register-miner.ts",
+    "reg:collector": "tsx examples/07-registration/register-collector.ts",
+    "bridge:send": "tsx examples/08-bridge/bridge-message.ts",
+    "fund-agent": "tsx scripts/fund-agent.ts",
+    "frontend": "tsx scripts/serve-frontend.ts"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "ethers": "^6.13.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

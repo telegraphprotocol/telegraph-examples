@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Telegraph · ERC-8183 jobs</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<header><h1>05 · ERC-8183 on-chain jobs</h1><a href="/">← all examples</a></header>
+<main>
+  <p class="kv">A smart-contract-native inference request: escrow USDC in the Diamond → <code>createJob(intentId, params, callback)</code> → the node routes to a miner → validators finalize → <b>2% USDC → Treasury, 98% swapped to MACHINA → miner</b> → your callback contract receives the result. Uses the protocol test USDC (0xfFC3…) and needs a little Base Sepolia ETH for gas.</p>
+
+  <h3>Wallet & escrow</h3>
+  <div class="row">
+    <input id="pkey" type="password" placeholder="testnet private key (optional — else MetaMask)" style="width:340px">
+    <button id="load">load wallet</button>
+    <span id="wallet" class="badge">no wallet</span>
+    <span id="escrow" class="badge"></span>
+  </div>
+  <div class="row">
+    <input id="depAmount" type="number" step="0.01" value="1" style="width:100px">
+    <button id="deposit" disabled>deposit USDC to escrow</button>
+    <span class="kv">approve + depositUSDC on the Diamond (4h withdrawal timelock)</span>
+  </div>
+
+  <h3>Create job</h3>
+  <div class="row">
+    <select id="intent">
+      <option>CHAT_COMPLETION</option>
+      <option>WEATHER_FORECAST</option>
+      <option>WEB_SEARCH</option>
+      <option>TEXT_GENERATION</option>
+    </select>
+    <input id="callback" placeholder="callback contract address (deployed via jobs:deploy-callback)" style="flex:1;min-width:320px">
+    <button id="create" disabled>createJob</button>
+  </div>
+  <textarea id="prompt">In exactly one sentence, what does a prediction market need from an AI oracle?</textarea>
+  <p class="kv">intentId = keccak256(intent name) → <code id="intentId"></code></p>
+
+  <h3>My jobs</h3>
+  <div class="row"><button id="refresh" disabled>refresh</button></div>
+  <table><thead><tr><th>id</th><th>state</th><th>budget</th><th>split (miner/fee)</th><th>callback result</th></tr></thead>
+  <tbody id="rows"></tbody></table>
+
+  <div class="log" id="log" style="max-height:380px"></div>
+</main>
+<script type="module">
+  import { ethers } from "https://cdn.jsdelivr.net/npm/ethers@6.13.4/+esm";
+  import { loadConfig, ADDR, BASESCAN, $, logger, makeSigner, fmtUSDC, DIAMOND_ABI, ERC20_ABI, CALLBACK_ABI, JOB_STATES } from "/assets/tg.js";
+
+  const cfg = await loadConfig();
+  const out = logger("#log");
+  let signer = null;
+
+  const intentIdOf = (name) => ethers.keccak256(ethers.toUtf8Bytes(name));
+  const showIntent = () => $("#intentId").textContent = intentIdOf($("#intent").value);
+  $("#intent").onchange = showIntent; showIntent();
+
+  async function refreshEscrow() {
+    const d = new ethers.Contract(ADDR.diamond, DIAMOND_ABI, signer.provider);
+    $("#escrow").textContent = `escrow ${fmtUSDC(await d.escrowBalance(signer.address))}`;
+  }
+
+  $("#load").onclick = async () => {
+    try {
+      signer = await makeSigner(ethers, cfg.rpcUrl, cfg.chainId, $("#pkey").value);
+      $("#wallet").textContent = signer.address; $("#wallet").className = "badge ok";
+      await refreshEscrow();
+      for (const b of ["deposit", "create", "refresh"]) $("#" + b).disabled = false;
+      const saved = localStorage.getItem("tg_callback");
+      if (saved && !$("#callback").value) $("#callback").value = saved;
+      out.ok(`wallet ready (${signer.kind})`);
+      await refreshJobs();
+    } catch (e) { out.err(e.message ?? String(e)); }
+  };
+
+  $("#deposit").onclick = async () => {
+    try {
+      const amount = BigInt(Math.round(parseFloat($("#depAmount").value) * 1e6));
+      const s = await signer.getSigner();
+      const usdc = new ethers.Contract(ADDR.usdcEscrow, ERC20_ABI, s);
+      const d = new ethers.Contract(ADDR.diamond, DIAMOND_ABI, s);
+      out.step(`approve ${fmtUSDC(amount)}…`);
+      await (await usdc.approve(ADDR.diamond, amount)).wait();
+      while ((await usdc.allowance(signer.address, ADDR.diamond)) < amount)
+        await new Promise((r) => setTimeout(r, 2000));
+      out.step("depositUSDC…");
+      const tx = await d.depositUSDC(amount);
+      await tx.wait();
+      out.ok(`deposited — ${BASESCAN}/tx/${tx.hash}`);
+      await refreshEscrow();
+    } catch (e) { out.err(e.shortMessage ?? e.message ?? String(e)); }
+  };
+
+  $("#create").onclick = async () => {
+    try {
+      const callback = $("#callback").value.trim();
+      if (!ethers.isAddress(callback)) { out.err("enter your deployed callback contract address (npm run jobs:deploy-callback)"); return; }
+      localStorage.setItem("tg_callback", callback);
+      const s = await signer.getSigner();
+      const d = new ethers.Contract(ADDR.diamond, DIAMOND_ABI, s);
+      const intentId = intentIdOf($("#intent").value);
+      out.step(`createJob(${$("#intent").value})…`);
+      const tx = await d.createJob(intentId, { addresses: [], integers: [], strings: [$("#prompt").value], bools: [] }, callback);
+      const rcpt = await tx.wait();
+      const ev = rcpt.logs.map((l) => { try { return d.interface.parseLog(l); } catch { return null; } }).find((e) => e?.name === "JobCreated");
+      const jobId = ev.args.jobId;
+      out.ok(`job ${jobId} created — ${BASESCAN}/tx/${tx.hash}`);
+      out.step("polling until Terminal (node routes → miner answers → validators settle)…");
+      for (let i = 0; i < 90; i++) {
+        const j = await d.getJob(jobId);
+        if (Number(j.state) === 1) {
+          out.ok(`job ${jobId} Terminal — fee ${fmtUSDC(j.protocolFee)} → treasury, ${fmtUSDC(j.minerPayment)} → miner (via MACHINA swap)`);
+          await refreshEscrow(); await refreshJobs();
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 10000));
+      }
+      out.warn("not Terminal after 15 min — check `npm run verify:job`");
+    } catch (e) { out.err(e.shortMessage ?? e.message ?? String(e)); }
+  };
+
+  async function refreshJobs() {
+    const d = new ethers.Contract(ADDR.diamond, DIAMOND_ABI, signer.provider);
+    const ids = await d.jobsByAgent(signer.address);
+    const cbAddr = $("#callback").value.trim();
+    const cb = ethers.isAddress(cbAddr) ? new ethers.Contract(cbAddr, CALLBACK_ABI, signer.provider) : null;
+    const rows = [];
+    for (const id of [...ids].reverse().slice(0, 15)) {
+      const j = await d.getJob(id);
+      let result = "—";
+      if (cb && j.callback.toLowerCase() === cbAddr.toLowerCase()) {
+        try {
+          const r = await cb.results(id);
+          if (r.received) result = (r.success ? "✔ " : "✘ ") + (r.firstString || r.errorMessage || "").slice(0, 120);
+        } catch {}
+      }
+      rows.push(`<tr><td>${id}</td><td>${JOB_STATES[Number(j.state)]}</td><td>${fmtUSDC(j.budget)}</td>
+        <td class="kv">${fmtUSDC(j.minerPayment)} / ${fmtUSDC(j.protocolFee)}</td><td class="kv">${result}</td></tr>`);
+    }
+    $("#rows").innerHTML = rows.join("");
+  }
+  $("#refresh").onclick = refreshJobs;
+</script>
+</body>
+</html>

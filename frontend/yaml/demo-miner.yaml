@@ -1,0 +1,54 @@
+version: "1"
+kind: miner
+id: 900
+slug: demo-openmeteo-miner
+protocol: generic
+name: Demo Open-Meteo Miner
+description: >
+  Example miner registration for the telegraph-examples repo. Wraps the free
+  Open-Meteo forecast API — no auth required — to demonstrate the full
+  permissionless miner lifecycle: host YAML, registerMiner on-chain, node
+  fetches + validates the YAML at the next epoch boundary, deregister.
+
+base_url: https://api.open-meteo.com
+
+rate_limit_per_sec: 5
+cache_ttl_sec: 30
+circuit_threshold: 5
+circuit_cooldown_seconds: 30
+
+endpoints:
+  - path: /forecast
+    external_path: /v1/forecast
+    method: GET
+    description: >
+      Hourly weather forecast. Pass latitude, longitude and an hourly variable
+      list such as temperature_2m.
+
+input_schema:
+  type: object
+  required: [latitude, longitude]
+  properties:
+    latitude:
+      type: number
+      minimum: -90
+      maximum: 90
+    longitude:
+      type: number
+      minimum: -180
+      maximum: 180
+    hourly:
+      type: string
+      description: Comma-separated hourly variables, e.g. temperature_2m.
+
+output_schema:
+  type: object
+  properties:
+    hourly:
+      type: object
+      description: Arrays keyed by requested variable.
+    latitude:
+      type: number
+    longitude:
+      type: number
+
