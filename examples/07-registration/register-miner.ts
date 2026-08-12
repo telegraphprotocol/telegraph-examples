@@ -3,6 +3,8 @@
  *
  * 1. Host a miner YAML over HTTP (frontend/yaml/demo-miner.yaml, served by
  *    `npm run frontend` at http://127.0.0.1:8787/yaml/demo-miner.yaml).
+ *    frontend/yaml/example-miner.yaml is the annotated reference version —
+ *    set MINER_YAML_FILE / MINER_YAML_URL / MINER_INTENTS to register it.
  * 2. registerMiner(yamlUrl, sha256(yaml), feeAddress, minPriceUsdc, intents)
  *    on the Diamond — permissionless, no bond in this release.
  * 3. At the next epoch boundary the node's listener fetches the YAML,
@@ -28,7 +30,13 @@ const REGISTER_ABI = [
   "event MinerRegistered(uint256 indexed registrationId, address indexed miner, string yamlUrl, bytes32 yamlHash, address feeAddress, uint256 minPriceUsdc, string[] supportedIntents)",
 ];
 
+// Defaults register the minimal demo-miner.yaml. Point both at
+// frontend/yaml/example-miner.yaml to register the fully annotated example
+// instead — MINER_YAML_FILE is what gets hashed, MINER_YAML_URL is what the
+// node fetches, and they must be the same bytes.
+const YAML_FILE = process.env.MINER_YAML_FILE ?? "frontend/yaml/demo-miner.yaml";
 const YAML_URL = process.env.MINER_YAML_URL ?? "http://127.0.0.1:8787/yaml/demo-miner.yaml";
+const INTENTS = (process.env.MINER_INTENTS ?? "WEATHER_CHECK").split(",").map((s) => s.trim()).filter(Boolean);
 const args = process.argv.slice(2).filter((a) => a !== "--");
 
 async function main() {
@@ -49,12 +57,14 @@ async function main() {
 
   log.banner("Register a miner on-chain");
   const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
-  const yaml = readFileSync(join(root, "frontend/yaml/demo-miner.yaml"));
+  const yaml = readFileSync(join(root, YAML_FILE));
   const yamlHash = "0x" + createHash("sha256").update(yaml).digest("hex");
 
   log.kv("miner wallet", wallet.address);
+  log.kv("yaml file", YAML_FILE);
   log.kv("yaml url", YAML_URL);
   log.kv("sha256(yaml)", yamlHash);
+  log.kv("intents", INTENTS.join(", "));
 
   // sanity: the URL must serve exactly these bytes or the node will reject it
   try {
@@ -65,7 +75,7 @@ async function main() {
     log.warn(`YAML URL not reachable (${YAML_URL}) — start \`npm run frontend\` first; the node will mark the record rejected until it can fetch it`);
   }
 
-  const tx = await reg.registerMiner(YAML_URL, yamlHash, wallet.address, 10_000, ["WEATHER_CHECK"]);
+  const tx = await reg.registerMiner(YAML_URL, yamlHash, wallet.address, 10_000, INTENTS);
   const rcpt = await tx.wait();
   const ev = rcpt.logs
     .map((l: any) => { try { return reg.interface.parseLog(l); } catch { return null; } })

@@ -1,0 +1,279 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Telegraph miner YAML — annotated reference example
+#
+# This is a complete, working miner. It wraps Open-Meteo (a free weather API
+# that needs no API key), so you can register it as-is and watch the whole
+# lifecycle work before you point it at your own API.
+#
+# Every block below is commented with what it does and whether it is required.
+# Copy this file, change the parts that describe your API, delete the rest.
+#
+#   Validate:  telegraph integration validate example-miner.yaml
+#   Serve:     npm run frontend      # http://127.0.0.1:8787/yaml/example-miner.yaml
+#   Register:  MINER_YAML_FILE=frontend/yaml/example-miner.yaml \
+#              MINER_YAML_URL=http://127.0.0.1:8787/yaml/example-miner.yaml \
+#              npm run reg:miner
+#
+# The bare-minimum version of this file is demo-miner.yaml, next to it.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Identity (all required except protocol/description) ──────────────────────
+version: "1"                    # Always "1"
+kind: miner                     # "miner" = called per request. "validator" = polled on a schedule.
+id: 901                         # Numeric ID used in API paths: /engine/v1/ask/901
+slug: example-weather-miner     # lowercase-with-hyphens, unique across the network
+protocol: generic               # "generic" for a normal HTTP API, "bittensor" for a subnet
+name: Example Weather Miner (Open-Meteo)
+description: >
+  Annotated reference miner for the Telegraph Miner Standard. Wraps the free
+  Open-Meteo forecast API to serve current conditions and multi-day forecasts.
+  No API key required, so this file can be registered and run as-is.
+
+base_url: https://api.open-meteo.com   # Required. Every endpoint path is appended to this.
+
+# ── Links shown to agents browsing the miner catalog (optional) ──────────────
+docs:
+  website: https://open-meteo.com
+  documentation: https://open-meteo.com/en/docs
+  # repository: https://github.com/you/your-miner
+  # twitter: "@yourhandle"
+  # discord: https://discord.gg/yourinvite
+
+# ── Auth (optional — omit entirely for an open API) ──────────────────────────
+# Open-Meteo needs no key, so this is "none". Your API key value NEVER goes in
+# this file: you name an environment variable and the node reads it at runtime.
+auth:
+  type: none                    # none | bearer | header
+
+  # Bearer token — sends "Authorization: Bearer <key>":
+  #   type: bearer
+  #   env_var: MY_MINER_API_KEY
+  #
+  # Custom header — sends "X-API-Key: <key>":
+  #   type: header
+  #   header_name: X-API-Key
+  #   env_var: MY_MINER_API_KEY
+  #
+  # Key in the query string, or several secrets at once, via `inject`:
+  #   type: none
+  #   inject:
+  #     - in: query             # header | query | body | multipart
+  #       name: key
+  #       env_var: MY_MINER_API_KEY
+
+# ── Operational limits the node applies when calling you (optional) ──────────
+rate_limit_per_sec: 5           # Max upstream requests/sec the node will make. 0 = unlimited.
+cache_ttl_sec: 300              # Reuse a response for this long. 0 = never cache.
+circuit_threshold: 5            # Consecutive failures before the node stops calling you
+circuit_cooldown_seconds: 30    # ...and how long it waits before trying again
+
+# ── Limits you want callers warned about (optional) ─────────────────────────
+# These are checked against the JSON request body before the node calls you,
+# so the caller gets a warning instead of burning a request that would have
+# failed. They only do something for endpoints that take a body — this miner
+# is GET-only, so the block is commented out. A POST miner would use it like:
+#
+# limitations:
+#   - code: MAX_BODY_SIZE
+#     message: Maximum request body size is 1MB.
+#     property: size_bytes          # size_bytes | value | length | count
+#     value_bytes: 1048576
+#   - code: MAX_PROMPT_LENGTH
+#     message: Prompt must be 4000 characters or fewer.
+#     param: prompt                 # the body key this applies to
+#     property: length
+#     value_num: 4000
+#     operator: gt                  # lte | gte | lt | gt | eq (default gt)
+
+# ── Endpoints ────────────────────────────────────────────────────────────────
+# `path` is what Telegraph exposes, `external_path` is what your API actually
+# serves. Two endpoints can share one external_path when they differ by params.
+#
+# `intents` says which canonical intents this endpoint answers, and `params`
+# spells out the request contract — so an agent can build a valid call for any
+# intent by parsing this file, with no guessing and no LLM.
+endpoints:
+  - path: /current
+    external_path: /v1/forecast
+    method: GET
+    description: Current weather conditions for a latitude/longitude.
+    intents: [WEATHER_CHECK]
+    params:
+      query:
+        required:
+          - name: latitude
+            type: number
+            intents: ["*"]      # ["*"] = every intent this endpoint serves
+            description: Latitude in decimal degrees (-90 to 90).
+            example: 52.52
+          - name: longitude
+            type: number
+            intents: ["*"]
+            description: Longitude in decimal degrees (-180 to 180).
+            example: 13.41
+          - name: current
+            type: string
+            intents: ["*"]
+            description: Comma-separated current-weather variables to return.
+            example: temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m
+
+  - path: /forecast
+    external_path: /v1/forecast
+    method: GET
+    description: Multi-day daily forecast for a latitude/longitude.
+    intents: [WEATHER_FORECAST]
+    params:
+      query:
+        required:
+          - name: latitude
+            type: number
+            intents: ["*"]
+            description: Latitude in decimal degrees (-90 to 90).
+            example: 52.52
+          - name: longitude
+            type: number
+            intents: ["*"]
+            description: Longitude in decimal degrees (-180 to 180).
+            example: 13.41
+          - name: daily
+            type: string
+            intents: ["*"]
+            description: Comma-separated daily variables to return.
+            example: temperature_2m_max,temperature_2m_min,precipitation_probability_max
+        optional:
+          - name: forecast_days
+            type: integer
+            intents: ["*"]
+            description: Number of days to forecast (1-16).
+            default: 7
+
+    # Rename incoming params to what your API expects — callers send `lat`,
+    # your API receives `latitude`:
+    # param_map:
+    #   lat: latitude
+    #   lon: longitude
+    #
+    # Send this one endpoint to a different host than base_url:
+    # endpoint_base_url: https://api2.example.com
+
+# ── Request/response shapes (optional but recommended) ───────────────────────
+# Plain JSON Schema. Tooling and the autonomous engine use these to build
+# correct requests and to parse what comes back.
+input_schema:
+  type: object
+  required: [latitude, longitude]
+  properties:
+    latitude:
+      type: number
+      minimum: -90
+      maximum: 90
+    longitude:
+      type: number
+      minimum: -180
+      maximum: 180
+    current:
+      type: string
+      description: Comma-separated current-weather variables.
+    daily:
+      type: string
+      description: Comma-separated daily forecast variables.
+    forecast_days:
+      type: integer
+      minimum: 1
+      maximum: 16
+
+output_schema:
+  type: object
+  properties:
+    latitude: { type: number }
+    longitude: { type: number }
+    current:
+      type: object
+      description: Current conditions, keyed by the variables you requested.
+      properties:
+        time: { type: string }
+        temperature_2m: { type: number }
+        relative_humidity_2m: { type: integer }
+        weather_code: { type: integer }
+        wind_speed_10m: { type: number }
+    daily:
+      type: object
+      description: Parallel arrays, one entry per forecast day.
+
+# ── Semantics — REQUIRED, this is what gets you routed traffic ───────────────
+semantics:
+  # Where the useful parts of your response live. All three are optional;
+  # declare the ones your API actually returns.
+  signal_mapping:
+    label_field: current        # the primary answer
+    # confidence_field: confidence   # a 0-1 score, if you return one
+    # reason_field: explanation      # human-readable reasoning, if you return one
+
+  # The canonical intents you can answer. These must match the on-chain
+  # canonical intent list exactly (UPPER_SNAKE_CASE) — an intent that isn't
+  # canonical is accepted but gets no autonomous routing. The same strings go
+  # into the `supportedIntents` argument of registerMiner.
+  supported_intents:
+    - WEATHER_CHECK
+    - WEATHER_FORECAST
+
+# ── On-chain data (optional — needed for ERC-8183 jobs) ─────────────────────
+# A smart contract can't read your JSON. This block says how to flatten a
+# response into the fixed OnChainData arrays a callback contract receives.
+# Skip it if you only serve HTTP/WebSocket callers.
+on_chain:
+  description: >
+    Current conditions as on-chain data: observation time, temperature in
+    Celsius (x100), relative humidity percent, and WMO weather code.
+
+  transform: direct             # direct = deterministic dot-path extraction (preferred)
+                                # llm    = an LLM extracts a snapshot from a messy response
+  min_price_usdc: 0.01          # Your floor price. 0.01 USDC is the network minimum.
+
+  # `index` is the slot in the on-chain array. `source_path` is a dot-path into
+  # your raw JSON response. Integers only, so scale decimals with `multiplier`.
+  fields:
+    strings:
+      - index: 0
+        name: observed_at
+        description: ISO-8601 timestamp of the observation.
+        source_path: current.time
+    integers:
+      - index: 0
+        name: temperature_c_x100
+        description: Temperature in Celsius, multiplied by 100.
+        source_path: current.temperature_2m
+        multiplier: 100
+      - index: 1
+        name: relative_humidity_pct
+        description: Relative humidity as a percentage.
+        source_path: current.relative_humidity_2m
+      - index: 2
+        name: weather_code
+        description: WMO weather interpretation code.
+        source_path: current.weather_code
+    # bools:
+    #   - index: 0
+    #     name: is_precipitating
+    #     description: Whether precipitation is currently falling.
+    #     source_path: current.precipitation
+    #     transform_rule: bool_from_int   # 0 -> false, non-zero -> true
+
+  # The reverse direction: a job arrives as OnChainData arrays, and this says
+  # how to turn those slots back into an HTTP call. `endpoint` is matched as a
+  # substring of the endpoint path, longest match wins.
+  request:
+    - endpoint: current
+      method: GET
+      query_params:
+        latitude:  { source: strings.0, type: float }
+        longitude: { source: strings.1, type: float }
+        current:   { source: strings.2, optional: true }
+
+    - endpoint: forecast
+      method: GET
+      query_params:
+        latitude:      { source: strings.0, type: float }
+        longitude:     { source: strings.1, type: float }
+        daily:         { source: strings.2, optional: true }
+        forecast_days: { source: numbers.0, type: int, optional: true }
