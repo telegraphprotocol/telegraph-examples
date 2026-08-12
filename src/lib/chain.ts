@@ -98,6 +98,39 @@ export async function findTransfers(
   });
 }
 
+/**
+ * Find the AuthorizationUsed event for one specific x402 payment.
+ *
+ * EIP-3009 USDC emits `AuthorizationUsed(address indexed authorizer,
+ * bytes32 indexed nonce)` when the facilitator settles. The nonce is unique per
+ * payment, which makes this the only reliable way to identify *your* settlement:
+ * every call costs the same amount from the same payer to the same receiver, so
+ * matching a Transfer by value alone will happily return a neighbouring call's
+ * transaction.
+ */
+export async function findAuthorizationUsed(
+  token: string,
+  fromBlock: number,
+  authorizer: string,
+  nonce: string,
+  p = provider(),
+): Promise<{ txHash: string; block: number } | null> {
+  const c = new ethers.Contract(
+    token,
+    ["event AuthorizationUsed(address indexed authorizer, bytes32 indexed nonce)"],
+    p,
+  );
+  const tip = await p.getBlockNumber();
+  const events = await queryFilterChunked(
+    c,
+    c.filters.AuthorizationUsed(authorizer, nonce),
+    fromBlock,
+    tip,
+  );
+  const ev = events[0] as ethers.EventLog | undefined;
+  return ev ? { txHash: ev.transactionHash, block: ev.blockNumber } : null;
+}
+
 /** Poll fn until it returns non-null or the timeout elapses. Transient RPC errors are tolerated. */
 export async function pollUntil<T>(
   fn: () => Promise<T | null>,
