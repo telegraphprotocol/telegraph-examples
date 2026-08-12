@@ -1,0 +1,99 @@
+version: "1"
+kind: miner
+id: 951
+slug: test-mymemory-translate
+protocol: generic
+name: MyMemory Translation (test miner)
+description: >
+  Machine translation between 100+ language pairs, backed by MyMemory's
+  translation memory. Registered as an end-to-end test of the miner
+  registration flow — deregistered after testing.
+
+base_url: https://api.mymemory.translated.net
+
+auth:
+  type: none
+
+rate_limit_per_sec: 2
+cache_ttl_sec: 300
+circuit_threshold: 5
+circuit_cooldown_seconds: 30
+
+docs:
+  website: https://mymemory.translated.net
+  documentation: https://mymemory.translated.net/doc/spec.php
+
+endpoints:
+  - path: /translate
+    external_path: /get
+    method: GET
+    description: Translate a short text between two languages.
+    intents: [LANGUAGE_TRANSLATION]
+    params:
+      query:
+        required:
+          - name: q
+            type: string
+            intents: ["*"]
+            description: Text to translate.
+            example: Hello world
+          - name: langpair
+            type: string
+            intents: ["*"]
+            description: Source and target language as ISO codes joined by a pipe.
+            example: en|es
+
+input_schema:
+  type: object
+  required: [q, langpair]
+  properties:
+    q:
+      type: string
+      description: Text to translate.
+    langpair:
+      type: string
+      description: Source|target language pair, e.g. "en|es".
+
+output_schema:
+  type: object
+  properties:
+    responseData:
+      type: object
+      properties:
+        translatedText: { type: string }
+        match: { type: number }
+    responseStatus: { type: integer }
+    responseDetails: { type: string }
+    quotaFinished: { type: boolean }
+
+semantics:
+  signal_mapping:
+    label_field: responseData
+    confidence_field: match
+    reason_field: responseDetails
+  supported_intents:
+    - LANGUAGE_TRANSLATION
+
+on_chain:
+  description: >
+    Translated text plus the translation-memory match quality.
+  transform: direct
+  min_price_usdc: 0.01
+  fields:
+    strings:
+      - index: 0
+        name: translated_text
+        description: The translated string.
+        source_path: responseData.translatedText
+    integers:
+      - index: 0
+        name: match_quality_x10000
+        description: Translation-memory match score, multiplied by 10000.
+        source_path: responseData.match
+        multiplier: 10000
+  request:
+    - endpoint: translate
+      method: GET
+      query_params:
+        q:        { source: strings.0 }
+        langpair: { source: strings.1 }
