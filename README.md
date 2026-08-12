@@ -100,6 +100,29 @@ collectors: activated immediately and scraped on the next daemon cycle).
 NOTE(node-version): match the collector YAML's `routing` block to your
 node's schema — see the comment in `frontend/yaml/demo-collector.yaml`.
 
+#### Writing your own miner YAML
+
+Two miner YAMLs ship here, both wrapping the free, keyless Open-Meteo API so
+they register and answer requests as-is:
+
+| File | What it's for |
+|---|---|
+| [`frontend/yaml/demo-miner.yaml`](frontend/yaml/demo-miner.yaml) | The shortest thing that registers — the required fields and nothing else |
+| [`frontend/yaml/example-miner.yaml`](frontend/yaml/example-miner.yaml) | **Annotated reference.** Every block the standard supports, commented with what it does and whether it's required — auth, rate limiting and circuit breaking, endpoints and their param contracts, intents, and the on-chain data mapping |
+
+Start from `example-miner.yaml`, delete what you don't need, and point
+`base_url` at your own API. To register it instead of the demo:
+
+```bash
+npm run frontend
+MINER_YAML_FILE=frontend/yaml/example-miner.yaml \
+MINER_YAML_URL=http://127.0.0.1:8787/yaml/example-miner.yaml \
+MINER_INTENTS=WEATHER_CHECK,WEATHER_FORECAST \
+  npm run reg:miner
+```
+
+Field-by-field reference: [YAML Configuration](https://docs.telegraphprotocol.com/docs/miners/yaml-config).
+
 ### Bridge (08)
 ```bash
 npm run bridge:send
@@ -128,7 +151,8 @@ testnet node may change as newer node deployments roll out.
 src/lib/          shared: config, x402 signer, WS client, chain helpers
 examples/01-08    one folder per feature, one script per flow
 frontend/         launcher + one page per feature (no build step)
-frontend/yaml/    demo miner/collector YAMLs served for registration
+frontend/yaml/    miner/collector YAMLs served for registration
+                  (example-miner.yaml = annotated miner reference)
 contracts/        TelegraphJobCallback + BridgeReceiverTestApp (forge)
 scripts/          fund-agent, serve-frontend
 ```
