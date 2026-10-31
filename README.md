@@ -19,6 +19,7 @@ Live testnet node: `http://13.237.89.59:7044` · Chain: Base Sepolia (84532)
 | 06 | **On-chain verification** — balances, x402 payment audit, full job audit | `verify:*` | built into pages |
 | 07 | **Registration** — permissionless miner + admin collector lifecycle | `reg:miner`, `reg:collector` | — |
 | 08 | **Bridge** — cross-chain `outboundMessage` → `portMessage` | `bridge:send` | — |
+| — | **Evaluator adapters** — check a safetensors delta package and your runnable-URL executor before registering | `adapter:inspect`, `adapter:check-executor` | [`evaluator-adapter/`](evaluator-adapter) |
 | — | **Daemon feed** — read the autonomous signal feed | `discovery:daemon-feed` | `daemon-feed.html` |
 
 ## Quick start
@@ -123,6 +124,25 @@ MINER_INTENTS=WEATHER_CHECK,WEATHER_FORECAST \
 
 Field-by-field reference: [YAML Configuration](https://docs.telegraphprotocol.com/docs/miners/yaml-config).
 
+### Evaluator adapters (shared Foundation Model)
+The scoring module of a judgment or hybrid intent is an **Evaluator adapter**: a
+safetensors delta package (a few MB of LoRA deltas and a reward head) that every
+validator runs on one shared Foundation Model. Build it with the adapter kit
+([telegraph-wasm-baseline](https://github.com/telegraphprotocol/telegraph-wasm-baseline)),
+then check what you will put on chain:
+
+```bash
+npm run adapter:inspect -- runs/CODE_REVIEW/CODE_REVIEW.safetensors --foundation foundation/foundation.json
+npm run adapter:check-executor -- --url https://your-executor.example/ --package runs/CODE_REVIEW/CODE_REVIEW.safetensors
+```
+
+`adapter:inspect` applies the node's Stage 1 rules and prints the keccak256 and the
+`registerWasm` arguments; `adapter:check-executor` sends your `wasmRunnableUrl` the batch
+request a validator sends and checks the identity echo (`foundation_hash`,
+`adapter_hash`, `tokenizer_hash`). Full-model float `.wasm` adapters are no longer
+accepted (`legacy_full_model`), and `wasm-scoring-module/` (the V1 MiniLM ABI) is retired.
+See [`evaluator-adapter/README.md`](evaluator-adapter/README.md).
+
 ### Bridge (08)
 ```bash
 npm run bridge:send
@@ -150,6 +170,8 @@ testnet node may change as newer node deployments roll out.
 ```
 src/lib/          shared: config, x402 signer, WS client, chain helpers
 examples/01-08    one folder per feature, one script per flow
+evaluator-adapter/ package and executor pre-flight for Evaluator adapters
+wasm-scoring-module/ retired V1 MiniLM module (reference only)
 frontend/         launcher + one page per feature (no build step)
 frontend/yaml/    miner/collector YAMLs served for registration
                   (example-miner.yaml = annotated miner reference)

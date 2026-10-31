@@ -1,4 +1,16 @@
-# WASM Scoring Module Example
+# WASM Scoring Module Example (retired format)
+
+> **Retired: nodes no longer accept this module.** It implements the V1 MiniLM
+> `rank_answer` ABI, which a node rejects at registration ("MiniLM rank_answer scoring
+> modules are retired and are no longer accepted"). Kept for reference only. Build instead:
+>
+> - for a **judgment or hybrid** intent, an Evaluator adapter: a safetensors delta package
+>   for the shared Foundation Model, built with the adapter kit
+>   ([telegraph-wasm-baseline](https://github.com/telegraphprotocol/telegraph-wasm-baseline))
+>   and checked with [`../evaluator-adapter`](../evaluator-adapter). Full-model float
+>   `.wasm` adapters are rejected too (`legacy_full_model`);
+> - for a **deterministic** intent, a comparator module (`imw_score_deterministic`); see
+>   [Build an Evaluator Adapter](https://docs.telegraphprotocol.com/docs/scoring/build-a-scoring-module).
 
 A minimal, runnable pair of projects for building and testing a Telegraph
 **scoring module** — the WASM program that judges how good a miner's answer

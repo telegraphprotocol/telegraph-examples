@@ -30,6 +30,8 @@
     "reg:miner": "tsx examples/07-registration/register-miner.ts",
     "reg:collector": "tsx examples/07-registration/register-collector.ts",
     "bridge:send": "tsx examples/08-bridge/bridge-message.ts",
+    "adapter:inspect": "tsx evaluator-adapter/inspect-package.ts",
+    "adapter:check-executor": "tsx evaluator-adapter/check-executor.ts",
     "fund-agent": "tsx scripts/fund-agent.ts",
     "frontend": "tsx scripts/serve-frontend.ts"
   },
