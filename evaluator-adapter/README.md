@@ -51,9 +51,10 @@ What a package must hold (the node's `pkg/wasm/runtime/lora_adapter.go`):
   `head.weight` `[768, 1]` and `head.bias` `[1]`: 178 tensors.
 - At most 64 MiB (a validator's `ADAPTER_LORA_MAX_BYTES`). A rank-8 package is 6.8 MB.
 - `tokenizer_hash` `67bc76f8b9386efba1a761c1c8e5ad439fd0eaf1c2826e9dd1a205c7af4dc456`, and
-  the `foundation_hash` of the Foundation Model validators run. Where the foundation and its
-  `foundation.json` are published is not decided yet (TBD); without `--foundation` the
-  script does not compare the foundation hash.
+  the `foundation_hash` of the Foundation Model validators run. Download `foundation.json`
+  from the [`modernbert-base-lora16-v1` release](https://github.com/telegraphprotocol/telegraph-foundation/releases/tag/modernbert-base-lora16-v1)
+  (`curl -fLO https://github.com/telegraphprotocol/telegraph-foundation/releases/download/modernbert-base-lora16-v1/foundation.json`). Without `--foundation` the script does not compare
+  the foundation hash.
 
 ## 2. Check your executor
 
@@ -105,8 +106,8 @@ It sends three short token lists with the identity a validator sends and checks 
 - The whole check must finish within 30 minutes (`WASM_REMOTE_EVAL_BUDGET`). On a laptop
   CPU one 512-token text takes 13-14 s on the foundation, so 30 texts take about 7 minutes.
 
-A reference executor that runs the foundation and a delta with the node's own runtime exists
-in the node repository (`wasm-remote-exec --kind float`) but is not published yet (TBD).
+The reference executor is the adapter kit's [`cmd/adapterexec`](https://github.com/telegraphprotocol/telegraph-wasm-baseline/tree/main/cmd/adapterexec): it runs the foundation and your
+package with the node's own runtime, so its bits match the validators'.
 
 ## 3. Register
 
