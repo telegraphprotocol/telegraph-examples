@@ -12,11 +12,9 @@
 > - for a **deterministic** intent, a comparator module (`imw_score_deterministic`); see
 >   [Build an Evaluator Adapter](https://docs.telegraphprotocol.com/docs/scoring/build-a-scoring-module).
 
-A minimal, runnable pair of projects for building and testing a Telegraph
-**scoring module** — the WASM program that judges how good a miner's answer
-is. See [Build a Scoring Module](../../telegraph-docs/scoring/build-a-scoring-module.md)
-for the full explanation of what this is and why it exists; this folder is
-the code that guide walks through.
+The rest of this page describes the V1 module as it was. A minimal, runnable
+pair of projects for building and testing a V1 **scoring module**, the WASM
+program that judged how good a miner's answer was.
 
 ```
 wasm-scoring-module/
@@ -29,7 +27,7 @@ wasm-scoring-module/
 A bare-bones module that scores a miner's answer by word overlap against the
 ground truth (exact match scores 1.0, no overlap scores 0.0). It's a
 legitimate starting point, not a toy: it implements the exact three exports
-(`alloc`, `dealloc`, `rank_answer`) every real scoring module needs.
+(`alloc`, `dealloc`, `rank_answer`) every V1 scoring module needed.
 
 Build it:
 
@@ -41,7 +39,7 @@ cargo build --release --target wasm32-unknown-unknown
 
 Output: `rust-module/target/wasm32-unknown-unknown/release/scoring_module.wasm`
 
-## go-tester/ — test it before you register it
+## go-tester/ — run it locally
 
 A small standalone CLI, independent of any Telegraph code, that loads a
 `.wasm` file the same way the node does: write `question`/`ground_truth`/
@@ -60,7 +58,7 @@ go run . ../rust-module/target/wasm32-unknown-unknown/release/scoring_module.was
 # score: 0.8333
 ```
 
-Try it with a few kinds of input before registering anything on-chain:
+Try it with a few kinds of input:
 
 - The exact correct answer → should score at or near `1.0`.
 - A clearly wrong or unrelated answer → should score `0.0` or near it.
@@ -69,6 +67,6 @@ Try it with a few kinds of input before registering anything on-chain:
 
 ## Next step
 
-Once your module behaves sensibly, register it — see "How to submit /
-register your module" in
-[Build a Scoring Module](../../telegraph-docs/scoring/build-a-scoring-module.md).
+Do not register this module: nodes reject it. For a judgment or hybrid intent,
+follow [Train an Evaluator Adapter](https://docs.telegraphprotocol.com/docs/scoring/train-a-scoring-adapter) and check
+the result with [`../evaluator-adapter`](../evaluator-adapter).
