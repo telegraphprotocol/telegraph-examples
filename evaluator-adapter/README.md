@@ -51,9 +51,9 @@ What a package must hold (the node's `pkg/wasm/runtime/lora_adapter.go`):
   `head.weight` `[768, 1]` and `head.bias` `[1]`: 178 tensors.
 - At most 64 MiB (a validator's `ADAPTER_LORA_MAX_BYTES`). A rank-8 package is 6.8 MB.
 - `tokenizer_hash` `67bc76f8b9386efba1a761c1c8e5ad439fd0eaf1c2826e9dd1a205c7af4dc456`, and
-  the `foundation_hash` of the Foundation Model validators run. The foundation and its
-  `foundation.json` are not published yet: the Telegraph team will publish them at a public
-  location announced with the deploy. Without `--foundation` the script does not compare
+  the `foundation_hash` of the Foundation Model validators run. Download `foundation.json`
+  from the [`modernbert-base-lora16-v1` release](https://github.com/telegraphprotocol/telegraph-foundation/releases/tag/modernbert-base-lora16-v1)
+  (`curl -fLO https://github.com/telegraphprotocol/telegraph-foundation/releases/download/modernbert-base-lora16-v1/foundation.json`). Without `--foundation` the script does not compare
   the foundation hash.
 
 ## 2. Check your executor
