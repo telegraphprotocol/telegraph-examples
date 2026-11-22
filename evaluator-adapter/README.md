@@ -114,8 +114,11 @@ package with the node's own runtime, so its bits match the validators'.
 `inspect-package` prints the arguments of
 `registerWasm(bytes32 wasmHash, string wasmUrl, string intent, address feeAddress, string wasmRunnableUrl)`.
 Host the package unchanged at an `https://` or `ipfs://` URL, approve the adapter bond in
-MACHINA (`entityBonds()` on the Diamond; released in full when you deregister), and register
-on the family prefix. Then follow the registration on `GET /api/wasm/<registrationId>`: it
+USDC (0.10 USDC since 2026-11-23; read it with `entityBonds()` on the Diamond, token `usdcToken()`;
+released in full when you deregister), and register
+on the parent family prefix (for example `GAS_PRICE`, not `GAS_PRICE_GENERAL`). Check the
+class first with `GET /engine/v1/intents/<intent>`: only `judgment` and `hybrid` intents take
+an adapter, and comparator modules are no longer accepted. Then follow the registration on `GET /api/wasm/<registrationId>`: it
 stays `pending` while it waits for the first confirmed epoch after the registration, then
 for the remote check, the download and Stage 1, the local confirmation and the competition
 round on the hidden evaluation split. Expect tens of minutes on top of the epoch wait.

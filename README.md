@@ -127,7 +127,10 @@ Field-by-field reference: [YAML Configuration](https://docs.telegraphprotocol.co
 ### Evaluator adapters (shared Foundation Model)
 The scoring module of a judgment or hybrid intent is an **Evaluator adapter**: a
 safetensors delta package (a few MB of LoRA deltas and a reward head) that every
-validator runs on one shared Foundation Model. Build it with the adapter kit
+validator runs on one shared Foundation Model. A deterministic intent takes no adapter
+(the node scores it with its built-in checker), and comparator modules are no longer
+accepted. Check an intent's class with `GET /engine/v1/intents/<intent>`, and register on
+the parent family (the prefix). Build the adapter with the adapter kit
 ([telegraph-wasm-baseline](https://github.com/telegraphprotocol/telegraph-wasm-baseline)),
 then check what you will put on chain:
 
