@@ -9,7 +9,10 @@
 >   ([telegraph-wasm-baseline](https://github.com/telegraphprotocol/telegraph-wasm-baseline))
 >   and checked with [`../evaluator-adapter`](../evaluator-adapter). Full-model float
 >   `.wasm` adapters are rejected too (`legacy_full_model`);
-> - for a **deterministic** intent, a comparator module (`imw_score_deterministic`); see
+> - for a **deterministic** intent, nothing: the node scores it with its built-in checker and
+>   takes no adapter. **Comparator modules** (`imw_score_deterministic`) are no longer accepted
+>   either. Check an intent's class with `GET /engine/v1/intents/<intent>`, and register
+>   adapters on the parent family (the prefix). See
 >   [Build an Evaluator Adapter](https://docs.telegraphprotocol.com/docs/scoring/build-a-scoring-module).
 
 The rest of this page describes the V1 module as it was. A minimal, runnable
